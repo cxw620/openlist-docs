@@ -99,6 +99,6 @@
     "typescript-natural-sort": "^0.7.2"
   },
   "lint-staged": {
-    "**/*": "prettier --write"
+    "**/*.{js,ts,css,tsx,jsx,md,html,yml,yaml}": "prettier --write"
   }
 }
