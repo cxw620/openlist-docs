@@ -1313,7 +1313,7 @@
   word-break: break-all;
 }
 
-/* https://github.com/alist-org/alist/issues/6929 */
+/* Fix the issue where fraction lines of $\frac{}{}$ are not displayed when using $\LaTeX$ syntax in md files */
 .katex-display .frac-line {
   border-bottom-width: 0.04em;
 }

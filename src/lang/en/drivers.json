@@ -1133,7 +1133,7 @@
     },
     "189CloudPC": {},
     "AList V2": {},
-    "AList V3": {},
+    "OpenList": {},
     "Alias": {},
     "Aliyundrive": {
       "alert": "There may be an infinite loop bug in this driver.\nDeprecated, no longer maintained and will be removed in a future version.\nWe recommend using the official driver AliyundriveOpen."
@@ -1217,7 +1217,7 @@
     "189Cloud": "189Cloud",
     "189CloudPC": "189CloudPC",
     "AList V2": "AList V2",
-    "AList V3": "AList V3",
+    "OpenList": "OpenList",
     "Alias": "Alias",
     "Aliyundrive": "Aliyundrive",
     "AliyundriveOpen": "AliyundriveOpen",
