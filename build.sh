@@ -2,15 +2,32 @@
 
 set -e
 
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${CYAN}$1${NC}"; }
+log_success() { echo -e "${GREEN}✓ $1${NC}"; }
+log_error() { echo -e "${RED}✗ Error: $1${NC}"; }
+log_warning() { echo -e "${YELLOW}$1${NC}"; }
+log_step() { echo -e "${PURPLE}$1${NC}"; }
+log_build() { echo -e "${BLUE}$1${NC}"; }
+
 # CI Build Script
 # Usage: ./build.sh [--dev|--release] [--compress|--no-compress]
 # Environment variables:
 #   OPENLIST_FRONTEND_BUILD_MODE=dev|release (default: dev)
 #   OPENLIST_FRONTEND_BUILD_COMPRESS=true|false (default: false)
+#   OPENLIST_FRONTEND_BUILD_ENFORCE_TAG=true|false (default: false)
 
 # Set defaults from environment variables
 BUILD_TYPE=${OPENLIST_FRONTEND_BUILD_MODE:-dev}
 COMPRESS_FLAG=${OPENLIST_FRONTEND_BUILD_COMPRESS:-false}
+ENFORCE_TAG=${OPENLIST_FRONTEND_BUILD_ENFORCE_TAG:-false}
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -31,18 +48,24 @@ while [[ $# -gt 0 ]]; do
             COMPRESS_FLAG="false"
             shift
             ;;
+        --enforce-tag)
+            ENFORCE_TAG="true"
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [--dev|--release] [--compress|--no-compress]"
+            echo "Usage: $0 [--dev|--release] [--compress|--no-compress] [--enforce-tag]"
             echo ""
-            echo "Options:"
-            echo "  --dev         Build development version (no version change)"
-            echo "  --release     Build release version (update version from git tags)"
+            echo "Options (will overwrite environment setting):"
+            echo "  --dev         Build development version"
+            echo "  --release     Build release version (will check if git tag match package.json version)"
             echo "  --compress    Create compressed archive"
-            echo "  --no-compress Skip compression (default)"
+            echo "  --no-compress Skip compression"
+            echo "  --enforce-tag Force git tag requirement for both dev and release builds"
             echo ""
             echo "Environment variables:"
             echo "  OPENLIST_FRONTEND_BUILD_MODE=dev|release (default: dev)"
             echo "  OPENLIST_FRONTEND_BUILD_COMPRESS=true|false (default: false)"
+            echo "  OPENLIST_FRONTEND_BUILD_ENFORCE_TAG=true|false (default: false)"
             exit 0
             ;;
         *)
@@ -53,58 +76,60 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ "$BUILD_TYPE" == "dev" ]; then
-    echo "Building DEV version..."
-    # For dev build, keep version as is
-    # Get version and commit for dev build
-    version=$(git describe --abbrev=0 --tags 2>/dev/null || echo "v0.0.0")
-    commit=$(git rev-parse --short HEAD)
-    version_clean=${version#v}
-    archive_name="openlist-frontend-dist-v${version_clean}-${commit}"
-elif [ "$BUILD_TYPE" == "release" ]; then
-    echo "Building RELEASE version..."
-    # replace version for release build
-    version=$(git describe --abbrev=0 --tags 2>/dev/null || echo "v0.0.0")
-    version_clean=${version#v}
-    archive_name="openlist-frontend-dist-v${version_clean}"
-    
-    echo "Git version found: $version"
-    echo "Cleaned version: $version_clean"
-    
-    # Replace version in package.json
-    if grep -q '"version": "0.0.0"' package.json; then
-        sed -i -e "s/\"version\": \"0.0.0\"/\"version\": \"$version_clean\"/g" package.json
-        echo "Version updated successfully"
-    else
-        echo "Warning: Could not find '\"version\": \"0.0.0\"' pattern in package.json"
-        echo "Current version line:"
-        grep '"version":' package.json || echo "No version field found"
+# Get git version and commit
+if [ "$BUILD_TYPE" == "release" ] || [ "$ENFORCE_TAG" == "true" ]; then
+    # For release build or when enforce-tag is set, git tag is required
+    if ! git_version=$(git describe --abbrev=0 --tags 2>/dev/null); then
+        log_error "No git tags found. Release build requires a git tag."
+        log_warning "Please create a tag first, or use --dev for development builds."
+        exit 1
     fi
-    
-    echo "Current package.json version:"
-    grep '"version":' package.json
+
+    package_version=$(grep '"version":' package.json | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+    git_version_clean=${git_version#v}
+    if [ "$git_version_clean" != "$package_version" ]; then
+        log_error "Package.json version (${package_version}) does not match git tag (${git_version_clean})."
+        exit 1
+    fi
 else
-    echo "Invalid build type: $BUILD_TYPE"
-    echo "Use --help for usage information"
-    exit 1
+    # For dev build, use tag if available, otherwise fallback to v0.0.0
+    git_version=$(git describe --abbrev=0 --tags 2>/dev/null || echo "v0.0.0")
+    git_version_clean=${git_version#v}
 fi
 
-echo "Archive name will be: ${archive_name}.tar.gz"
+commit=$(git rev-parse --short HEAD)
+
+if [ "$BUILD_TYPE" == "dev" ]; then
+    version_tag="v${git_version_clean}-${commit}"
+    log_build "Building DEV version ${version_tag}..."
+elif [ "$BUILD_TYPE" == "release" ]; then
+    version_tag="v${git_version_clean}"
+    log_build "Building RELEASE version ${version_tag}..."
+fi
+
+archive_name="openlist-frontend-dist-${version_tag}"
+log_info "Archive name will be: ${archive_name}.tar.gz"
 
 # build
+log_step "==== Installing dependencies ===="
 pnpm install
+log_step "==== Building i18n ===="
 pnpm i18n:release
+log_step "==== Building project ===="
 pnpm build
+
+# Write version to dist/VERSION file
+log_step "Writing version $version_tag to dist/VERSION..."
+echo -n "$version_tag" | cat > dist/VERSION
+log_success "Version file created: dist/VERSION"
 
 # handle compression if requested
 if [ "$COMPRESS_FLAG" == "true" ]; then
-    echo "Creating compressed archive..."
-    
-    # Use the archive name determined earlier
+    log_step "Creating compressed archive..."
+
     tar -czvf "${archive_name}.tar.gz" -C dist .
     mv "${archive_name}.tar.gz" dist/
-    echo "Build with compression completed. File created:"
-    echo "- dist/${archive_name}.tar.gz"
-else
-    echo "Build completed without compression."
+    log_success "Compressed archive created: dist/${archive_name}.tar.gz"
 fi
+
+log_success "Build completed."

@@ -59,15 +59,26 @@ jobs:
       - name: Publish npm
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.draft) }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-          pnpm publish --no-git-checks
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "NPM_TOKEN not set, skipping npm publish"
+          else
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+            pnpm publish --no-git-checks
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Read version from dist/VERSION
+        id: version
+        run: echo "tag_name=$(cat dist/VERSION)" >> $GITHUB_OUTPUT
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.tar.gz
+          name: Release ${{ steps.version.outputs.tag_name }}
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          files: dist/openlist-frontend-dist-v*.tar.gz
+          fail_on_unmatched_files: true
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
 

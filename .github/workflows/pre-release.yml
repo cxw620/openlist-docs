@@ -43,10 +43,15 @@ jobs:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
 
+      - name: Read version from dist/VERSION
+        id: version
+        run: echo "tag_name=$(cat dist/VERSION)" >> $GITHUB_OUTPUT
+
       - name: Upload Pre-release Assets
         uses: softprops/action-gh-release@v2
         with:
-          name: Pre-release
+          name: Pre-release ${{ steps.version.outputs.tag_name }}
+          tag_name: ${{ steps.version.outputs.tag_name }}
           # Enforce the naming strategy
           files: dist/openlist-frontend-dist-v*-*.tar.gz
           fail_on_unmatched_files: true
