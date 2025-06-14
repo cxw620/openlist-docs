@@ -36,29 +36,6 @@ jobs:
           version: 9
           run_install: false
 
-      - name: Generate pre-release version
-        id: version
-        run: |
-          # Get latest tag or default to v0.0.0
-          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          # Get short commit hash
-          commit_hash=$(git rev-parse --short HEAD)
-          # Get current date for build number
-          build_date=$(date +%Y%m%d)
-
-          # Remove 'v' prefix from tag for semver processing
-          version_base=${latest_tag#v}
-
-          # Create proper semver pre-release version
-          pre_version="v${version_base}-pre.${build_date}.${commit_hash}"
-
-          echo "Latest tag: $latest_tag"
-          echo "Pre-release version: $pre_version"
-          echo "version=$pre_version" >> $GITHUB_OUTPUT
-
-          # Create temporary tag for build script
-          git tag "$pre_version"
-
       - name: Build Pre-release
         run: |
           chmod +x build.sh
@@ -70,9 +47,10 @@ jobs:
       - name: Upload Pre-release Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: Pre-release ${{ steps.version.outputs.version }}
-          files: dist/*.tar.gz
+          name: Pre-release
+          # Enforce the naming strategy
+          files: dist/openlist-frontend-dist-v*-*.tar.gz
+          fail_on_unmatched_files: true
           prerelease: true
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
 
